@@ -1,0 +1,52 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build_test:
+
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: ${{secrets.DB_USER}}
+          POSTGRES_PASSWORD: ${{secrets.DB_PASSWORD}}
+          POSTGRES_DB: ${{secrets.DB_NAME}}
+
+        ports:
+          - 5432:5432
+        volumes:
+          - ${{github.workspace}}/database:/docker-entrypoint-initdb.d
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 14
+    - name: Build the project
+      run: |
+        npm install webpack @nestjs/cli
+        npm install
+        npm run build
+    - name: Run Unit and Integration tests
+      run: |
+        npm run test
+    - name: Set up Testing Database and Run End to End Tests.
+      run: |
+        cat database/db_dump.sql | docker exec -i $(docker ps -q) psql -U ${{secrets.DB_USER}}  -d  ${{secrets.DB_NAME}}
+        npm run test:e2e
+
+
+
+  
+      
